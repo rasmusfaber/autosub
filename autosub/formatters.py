@@ -25,6 +25,13 @@ def srt_formatter(subtitles, padding_before=0, padding_after=0):
         sub_rip_file.append(item)
     return '\n'.join(six.text_type(item) for item in sub_rip_file)
 
+def srt_parser(path):
+    """
+    Read a list of subtitles in SRT format
+    """
+    srts = pysrt.open(path)
+    return [((srt.start.ordinal/1000, srt.end.ordinal/1000), srt.text) for srt in srts]
+
 
 def vtt_formatter(subtitles, padding_before=0, padding_after=0):
     """
@@ -63,4 +70,8 @@ FORMATTERS = {
     'vtt': vtt_formatter,
     'json': json_formatter,
     'raw': raw_formatter,
+}
+
+PARSERS = {
+    'srt': srt_parser
 }

@@ -16,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import wave
+import platform
 
 import requests
 from googleapiclient.discovery import build
@@ -24,7 +25,8 @@ from progressbar import ProgressBar, Percentage, Bar, ETA
 from autosub.constants import (
     LANGUAGE_CODES, GOOGLE_SPEECH_API_KEY, GOOGLE_SPEECH_API_URL,
 )
-from autosub.formatters import FORMATTERS
+from autosub.formatters import FORMATTERS, PARSERS
+from autosub.fuzzy_match import convert_with_fuzzy_match
 
 DEFAULT_SUBTITLE_FORMAT = 'srt'
 DEFAULT_CONCURRENCY = 10
@@ -61,7 +63,7 @@ class FLACConverter(object): # pylint: disable=too-few-public-methods
             start, end = region
             start = max(0, start - self.include_before)
             end += self.include_after
-            temp = tempfile.NamedTemporaryFile(suffix='.flac')
+            temp = tempfile.NamedTemporaryFile(suffix='.flac', delete=False)
             command = ["ffmpeg", "-ss", str(start), "-t", str(end - start),
                        "-y", "-i", self.source_path,
                        "-loglevel", "error", temp.name]
@@ -95,6 +97,8 @@ class SpeechRecognizer(object): # pylint: disable=too-few-public-methods
                     continue
 
                 for line in resp.content.decode('utf-8').split("\n"):
+                    if not line:
+                        continue
                     try:
                         line = json.loads(line)
                         line = line['result'][0]['alternative'][0]['transcript']
@@ -150,6 +154,9 @@ def which(program):
         """
         return os.path.isfile(file_path) and os.access(file_path, os.X_OK)
 
+    if "nt" == platform.os.name:        # windows can't execute program without .exe extension
+        if ".exe" != program[-4:]:
+            program = program + ".exe"
     fpath, _ = os.path.split(program)
     if fpath:
         if is_exe(program):
@@ -223,6 +230,7 @@ def find_speech_regions(filename, frame_width=4096, min_region_size=0.5, max_reg
 
 def generate_subtitles( # pylint: disable=too-many-locals,too-many-arguments
         source_path,
+        input=None,
         output=None,
         concurrency=DEFAULT_CONCURRENCY,
         src_language=DEFAULT_SRC_LANGUAGE,
@@ -292,6 +300,12 @@ def generate_subtitles( # pylint: disable=too-many-locals,too-many-arguments
             raise
 
     timed_subtitles = [(r, t) for r, t in zip(regions, transcripts) if t]
+
+    if input:
+        parser = PARSERS.get(subtitle_file_format)
+        parsed_subtitle = parser(input)
+        timed_subtitles = convert_with_fuzzy_match(parsed_subtitle, timed_subtitles)
+
     formatter = FORMATTERS.get(subtitle_file_format)
     formatted_subtitles = formatter(timed_subtitles)
 
@@ -350,6 +364,8 @@ def main():
                         nargs='?')
     parser.add_argument('-C', '--concurrency', help="Number of concurrent API requests to make",
                         type=int, default=DEFAULT_CONCURRENCY)
+    parser.add_argument('-i', '--input',
+                        help="Input path for source subtitle")
     parser.add_argument('-o', '--output',
                         help="Output path for subtitles (by default, subtitles are saved in \
                         the same directory and name as the source path)")
@@ -393,6 +409,7 @@ def main():
             api_key=args.api_key,
             subtitle_file_format=args.format,
             output=args.output,
+            input=args.input
         )
         print("Subtitles file created at {}".format(subtitle_file_path))
     except KeyboardInterrupt:
