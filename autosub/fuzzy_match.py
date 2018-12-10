@@ -1,7 +1,5 @@
 from sys import argv
 
-import numpy as np
-import pysrt
 from Levenshtein import distance
 
 from autosub.regressor import piecewise
@@ -10,12 +8,7 @@ from autosub.formatters import srt_formatter
 
 
 def score(s1, s2):
-    return distance(s1.text.lower(), s2.text.lower()) / max(len(s1.text), len(s2.text)) \
-        # * math.sqrt(1+abs((s1.start-s2.start).ordinal))
-
-
-def piecewise_linear(x, x0, y1, y2):
-    return np.piecewise(x, [x < x0], [lambda x: x + y1, lambda x: x + y2])
+    return distance(s1[1].lower(), s2[1].lower()) / max(len(s1[1]), len(s2[1]))
 
 
 def fuzzy_match(srt1, srt2):
@@ -25,38 +18,6 @@ def fuzzy_match(srt1, srt2):
     y = []
     while i < len(srt1) and j < len(srt2):
         scores = [(score(srt1[i], srt2[k]), k) for k in range(max(0, j - 100), min(len(srt2), j + 100))]
-        scores.sort()
-        best = scores[0]
-        if best[0] < 0.3:
-            # print(str(best[0]) + " " + str(srt1[i].start) + " " + srt1[i].text + " | " + str(srt2[best[1]].start) + " " + srt2[best[1]].text)
-            x.append(srt1[i].start.ordinal)
-            y.append(srt2[best[1]].start.ordinal)
-            j = best[1] + 1
-        i = i + 1
-
-    model = piecewise(x, y, 0.5)
-
-    # print(model)
-    # figure()
-    # plot(x, y, 'ro')
-    # all_x = [s.start.ordinal for s in srt1]
-    # plot(all_x, model.predict(all_x))
-    # show()
-
-    return model
-
-
-def score2(s1, s2):
-    return distance(s1[1].lower(), s2[1].lower()) / max(len(s1[1]), len(s2[1]))
-
-
-def fuzzy_match2(srt1, srt2):
-    i = 0
-    j = 0
-    x = []
-    y = []
-    while i < len(srt1) and j < len(srt2):
-        scores = [(score2(srt1[i], srt2[k]), k) for k in range(max(0, j - 100), min(len(srt2), j + 100))]
         scores.sort()
         best = scores[0]
         if best[0] < 0.3:
@@ -79,7 +40,7 @@ def fuzzy_match2(srt1, srt2):
 
 
 def convert_with_fuzzy_match(text_source, time_source):
-    model = fuzzy_match2(text_source, time_source)
+    model = fuzzy_match(text_source, time_source)
     print(model)
     res = [((model.predict([srt[0][0]])[0], model.predict([srt[0][1]])[0]), srt[1]) for srt in text_source]
     return res
